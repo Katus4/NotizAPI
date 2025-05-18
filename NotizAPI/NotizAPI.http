@@ -1,0 +1,6 @@
+@NotizAPI_HostAddress = http://localhost:5246
+
+GET {{NotizAPI_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
