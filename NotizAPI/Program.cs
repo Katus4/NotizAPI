@@ -2,19 +2,20 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
-using DotNetEnv;
 using NotizApi.Data;
 
-DotEnv.Load(); // lädt Variablen aus .env
-
 var builder = WebApplication.CreateBuilder(args);
-builder.Configuration.AddEnvironmentVariables();
 
-// 1) DbContext mit PostgreSQL
+// 1) Konfigurationsquellen: Environment Variables + User Secrets (lokal)
+builder.Configuration
+    .AddEnvironmentVariables()
+    .AddUserSecrets<Program>(optional: true);
+
+// 2) DbContext mit PostgreSQL
 builder.Services.AddDbContext<NotizContext>(opt =>
     opt.UseNpgsql(builder.Configuration.GetConnectionString("Default")));
 
-// 2) JWT-Authentifizierung
+// 3) JWT-Authentifizierung
 var jwtCfg = builder.Configuration.GetSection("Jwt");
 var key    = Encoding.UTF8.GetBytes(jwtCfg["Key"]!);
 
@@ -31,15 +32,19 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         };
     });
 
+// 4) MVC & Swagger
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
 
+// 5) Middleware-Pipeline
 app.UseSwagger();
 app.UseSwaggerUI();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
+
+// 6) Start
 app.Run();

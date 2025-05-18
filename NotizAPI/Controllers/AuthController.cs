@@ -26,14 +26,21 @@ namespace NotizApi.Controllers
 
         private (byte[] hash, byte[] salt) HashPassword(string password)
         {
-            var salt   = RandomNumberGenerator.GetBytes(16);
-            var pepper = Encoding.UTF8.GetBytes(_cfg["Jwt:Key"]!);
-            var pwd    = Encoding.UTF8.GetBytes(password).Concat(pepper).ToArray();
+            // Salt generieren
+            byte[] salt = RandomNumberGenerator.GetBytes(16);
+            // Pepper aus Konfiguration (globaler geheimer Schlüssel)
+            string pepper = _cfg["Jwt:Key"]!;
+            // Passwort + Pepper kombinieren
+            string combined = password + pepper;
 
-            var hash = KeyDerivation.Pbkdf2(
-                password: pwd, salt: salt,
+            // PBKDF2-Hash erzeugen
+            byte[] hash = KeyDerivation.Pbkdf2(
+                password: combined,
+                salt: salt,
                 prf: KeyDerivationPrf.HMACSHA256,
-                iterationCount: 100_000, numBytesRequested: 32);
+                iterationCount: 100_000,
+                numBytesRequested: 32
+            );
 
             return (hash, salt);
         }
@@ -55,6 +62,7 @@ namespace NotizApi.Controllers
 
             _db.Users.Add(user);
             await _db.SaveChangesAsync();
+
             return Ok(new { user.Id, user.Username });
         }
 
@@ -62,19 +70,25 @@ namespace NotizApi.Controllers
         public async Task<IActionResult> Login([FromBody] LoginDto dto)
         {
             var user = await _db.Users.SingleOrDefaultAsync(u => u.Username == dto.Username);
-            if (user == null) return Unauthorized();
+            if (user == null) 
+                return Unauthorized();
 
-            var pepper   = Encoding.UTF8.GetBytes(_cfg["Jwt:Key"]!);
-            var pwdBytes = Encoding.UTF8.GetBytes(dto.Password).Concat(pepper).ToArray();
+            // Passwort + Pepper kombinieren
+            string pepper = _cfg["Jwt:Key"]!;
+            string combined = dto.Password + pepper;
 
-            var hashCheck = KeyDerivation.Pbkdf2(
-                password: pwdBytes, salt: user.Salt,
+            byte[] hashCheck = KeyDerivation.Pbkdf2(
+                password: combined,
+                salt: user.Salt,
                 prf: KeyDerivationPrf.HMACSHA256,
-                iterationCount: 100_000, numBytesRequested: 32);
+                iterationCount: 100_000,
+                numBytesRequested: 32
+            );
 
             if (!hashCheck.SequenceEqual(user.PasswordHash))
                 return Unauthorized();
 
+            // JWT erstellen
             var claims = new[]
             {
                 new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
